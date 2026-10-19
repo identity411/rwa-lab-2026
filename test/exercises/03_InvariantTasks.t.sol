@@ -11,21 +11,20 @@ import {MockPriceFeed} from "../../src/exercises/MockPriceFeed.sol";
 import {MockTBillCustodian} from "../../src/exercises/MockTBillCustodian.sol";
 import {RedemptionQueue} from "../../src/exercises/RedemptionQueue.sol";
 
-/// @title Ex6 — the two bridge invariants
-/// @notice Invariant testing flips the usual test around: let the machine call operations
-///         randomly and repeatedly, then ask "no matter how it thrashes, does this property
-///         still hold?" That is how a bridge should be tested — you will never guess the order
-///         an attacker does things in.
+/// @title Ex6 —— 桥的两条不变量
+/// @notice 不变量测试把普通测试反过来：让机器随机、连续地调用操作，
+///         然后问「无论怎么折腾，这条性质还在不在？」桥就应该这样测——
+///         你永远猜不到攻击者会以什么顺序做事。
 ///
-///         Acceptance: make exercise (it should be red until you are finished)
+///         验收：make exercise（完成前应该是红的）。
 ///
-/// @dev Ex6 depends on Ex5: the handler below calls enqueue / settle / claim, which are the
-///      four functions you implement in RedemptionQueue.sol. Finish Ex5 first, or the fuzzer
-///      will only ever see reverts.
+/// @dev Ex6 依赖 Ex5：下面的 handler 调用 enqueue / settle / claim，
+///      也就是你在 RedemptionQueue.sol 里实现的四个函数。先完成 Ex5，
+///      否则 fuzzer 只会看到 revert。
 ///
-///      How it works: Foundry picks a function from the handler at random, picks random
-///      arguments, calls it, and repeats N times; after each round it runs every invariant_*
-///      function. The first failed assertion is a counterexample.
+///      工作原理：Foundry 从 handler 里随机挑一个函数、随机挑参数、调用它，
+///      重复 N 次；每一轮之后运行所有 invariant_* 函数。第一个失败的断言
+///      就是反例。
 contract BridgeHandler is Test {
     MockUSDC internal usdc;
     TBillToken internal tBill;
@@ -34,7 +33,7 @@ contract BridgeHandler is Test {
 
     address[3] public users;
 
-    /// @dev Bookkeeping: proves the fuzzer really reached the handler instead of idling
+    /// @dev 记账：证明 fuzzer 真的调到了 handler，而不是在空转
     uint256 public ghost_enqueues;
     uint256 public ghost_settles;
     uint256 public ghost_claims;
@@ -53,7 +52,7 @@ contract BridgeHandler is Test {
         }
     }
 
-    /// @dev Given — pay USDC, receive shares at today's NAV
+    /// @dev 给定——支付 USDC，按今天的 NAV 收到份额
     function subscribe(uint256 userSeed, uint256 amount) external {
         address user = users[bound(userSeed, 0, users.length - 1)];
 
@@ -67,13 +66,13 @@ contract BridgeHandler is Test {
         vm.stopPrank();
     }
 
-    /// @dev Given — the reporter moves the NAV. Kept inside a sane band so the fuzzer spends
-    ///      its budget on the queue rather than on absurd prices.
+    /// @dev 给定——报告人移动 NAV。保持在合理区间内，让 fuzzer 把预算花在
+    ///      队列上，而不是荒谬的价格上。
     function attest(uint256 navSeed) external {
         vault.attest(int256(bound(navSeed, 0.5e8, 2e8)));
     }
 
-    /// @dev Given — the SPV wires cash back into the vault, the way T+1 proceeds would arrive
+    /// @dev 给定——SPV 把现金汇回 vault，就像 T+1 的 proceeds 到账一样
     function fundVault(uint256 amount) external {
         uint256 balance = usdc.balanceOf(address(this));
         if (balance == 0) return;
@@ -83,28 +82,58 @@ contract BridgeHandler is Test {
         vault.depositReserves(amount);
     }
 
-    /// TODO Ex6.1 — implement enqueue
-    /// @dev Steps:
-    ///       1) pick one user at random (a user may hold 0 tBILL — if so, return early)
-    ///       2) bound the shares to [1, that user's tBILL balance]
-    ///       3) call queue.enqueue(shares) as that user
-    ///       4) do not forget the approval — enqueue pulls the shares in with transferFrom
-    ///      Hint: the two parameters have no names yet. Name them first.
-    function enqueue(uint256, uint256) external {}
+    /// Ex6.1 —— 实现 enqueue
+    /// @dev 步骤：
+    ///       1) 随机选一个用户（用户可能持有 0 tBILL——如果是，提前返回）
+    ///       2) 把 shares 约束在 [1, 该用户的 tBILL 余额]
+    ///       3) 以该用户身份调用 queue.enqueue(shares)
+    ///       4) 别忘了 approve——enqueue 用 transferFrom 把份额拉进去
+    ///      提示：两个参数还没有名字。先给它们命名。
+    function enqueue(uint256 userSeed, uint256 sharesSeed) external {
+        address user = users[bound(userSeed, 0, users.length - 1)];
 
-    /// TODO Ex6.2 — implement settle
-    /// @dev Steps:
-    ///       1) bound `assets` to [1, vault.reserveBalance()] (return early if the vault is empty)
-    ///       2) call queue.settle(assets)
-    ///      Settling with less cash than the head ticket needs is legal — it simply pays nothing.
-    function settle(uint256) external {}
+        uint256 balance = tBill.balanceOf(user);
+        if (balance == 0) return;
+        uint256 shares = bound(sharesSeed, 1, balance);
 
-    /// TODO Ex6.3 — implement claim
-    /// @dev Steps:
-    ///       1) pick one user at random
-    ///       2) if that user has nothing claimable, return early
-    ///       3) call queue.claim() as that user
-    function claim(uint256) external {}
+        vm.startPrank(user);
+        tBill.approve(address(queue), shares);
+        queue.enqueue(shares);
+        vm.stopPrank();
+
+        ++ghost_enqueues;
+    }
+
+    /// Ex6.2 —— 实现 settle
+    /// @dev 步骤：
+    ///       1) 把 `assets` 约束在 [1, vault.reserveBalance()]（vault 为空则提前返回）
+    ///       2) 调用 queue.settle(assets)
+    ///      用比队头 ticket 更少的现金结算也是合法的——它只是什么都不付。
+    function settle(uint256 assetsSeed) external {
+        uint256 balance = vault.reserveBalance();
+        if (balance == 0) return;
+        uint256 assets = bound(assetsSeed, 1, balance);
+
+        queue.settle(assets);
+
+        ++ghost_settles;
+    }
+
+    /// Ex6.3 —— 实现 claim
+    /// @dev 步骤：
+    ///       1) 随机选一个用户
+    ///       2) 如果该用户没有可领取的金额，提前返回
+    ///       3) 以该用户身份调用 queue.claim()
+    function claim(uint256 userSeed) external {
+        address user = users[bound(userSeed, 0, users.length - 1)];
+
+        if (queue.claimable(user) == 0) return;
+
+        vm.prank(user);
+        queue.claim();
+
+        ++ghost_claims;
+    }
 }
 
 contract InvariantTasksTest is Test {
@@ -145,7 +174,7 @@ contract InvariantTasksTest is Test {
         vault.grantRole(vault.OPERATOR_ROLE(), address(handler));
         queue.grantRole(queue.SETTLER_ROLE(), address(handler));
 
-        // Let the fuzzer call only the handler's own actions, not its inherited helpers
+        // 让 fuzzer 只调用 handler 自己的动作，不要调用它继承来的 helper
         bytes4[] memory selectors = new bytes4[](6);
         selectors[0] = BridgeHandler.subscribe.selector;
         selectors[1] = BridgeHandler.attest.selector;
@@ -157,24 +186,24 @@ contract InvariantTasksTest is Test {
         targetContract(address(handler));
     }
 
-    /// TODO Ex6.4 — escrow conservation (plank c)
-    /// @dev The queue holds exactly the shares it still owes a payout for. It never loses one
-    ///      and never invents one. The assertion below is wrong on purpose (it asserts a
-    ///      constant 1), which is why it goes red. Turn it into the property you want.
+    /// Ex6.4 —— escrow conservation（木板 c）
+    /// @dev 队列持有的份额，正好等于它还欠着的 payout 份额。不丢一张，也不凭空多一张。
+    ///      原来的断言是故意写错的（它断言常量 1），所以它是红的。现在它捍卫的是
+    ///      真正要成立的性质。
     function invariant_EscrowConservation() public view {
-        assertEq(tBill.balanceOf(address(queue)), 1, "TODO Ex6.4");
+        assertEq(tBill.balanceOf(address(queue)), queue.pendingShares(), "queue holds its escrow");
     }
 
-    /// TODO Ex6.5 — settlement solvency (plank c)
-    /// @dev The queue never owes settled cash it does not hold: it pays at least what the
-    ///      claimable balances add up to. The assertion below is deliberately false.
+    /// Ex6.5 —— settlement solvency（木板 c）
+    /// @dev 队列不欠已结算的、自己没有的现金：它持有的现金至少等于所有 claimable
+    ///      余额之和。原来的断言是故意写错的。
     ///
-    ///      Then ask yourself why nobody can write the more tempting invariant:
+    ///      然后问自己：为什么没有人能写出那条更诱人的不变量：
     ///        vault.reserveBalance() >= queue.pendingAssets()
-    ///      Hint: when the NAV rises, where does the extra value physically sit? Is it in the
-    ///      vault's USDC buffer, or in the T-Bills at the custodian? That gap is the whole
-    ///      lesson of this lab — write your answer up as question C1.
+    ///      提示：NAV 上涨时，多出来的价值物理上在哪里？在 vault 的 USDC buffer 里，
+    ///      还是在托管人那里的 T-Bill 里？这个缺口就是整个 lab 的教训——把答案写进
+    ///      讨论题 C1。
     function invariant_SettlementSolvency() public view {
-        assertEq(usdc.balanceOf(address(queue)), 1, "TODO Ex6.5");
+        assertGe(usdc.balanceOf(address(queue)), queue.totalClaimable(), "queue covers its claims");
     }
 }

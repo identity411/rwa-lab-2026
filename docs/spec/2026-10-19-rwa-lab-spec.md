@@ -6,7 +6,7 @@
 |---|---|
 | 规范英文名 | RWA Tokenization Lab — Assignment Specification |
 | 规范编号 | SPEC-2026-10-19-RWA-LAB |
-| 版本 | v1.7 |
+| 版本 | v1.8 |
 | 发布日期 | 2026-10-19 |
 | 适用课程 | COMP7810A · Assignment Three「RWA Tokenization Lab」 |
 | 仓库 | `rwa-lab-2026` |
@@ -217,7 +217,7 @@ make test      # 应输出 7 passed; 0 failed
 | **P3** Attestation | Ex3 | ✅ 10-20 | 2 个 `test_Ex3_*` 转绿 | 一个数字重估整本账 |
 | **P4** 准入 | Ex4 | ✅ 10-20 | 3 个 `test_Ex4_*` 转绿 | 白名单检查两端；冻结也冻结没收 |
 | **P5** 赎回队列 | Ex5 | ✅ 10-20 | 4 个 TODO 完成，`02_*` 组全绿 | T+1 不能原子结算；三套小数 |
-| **P6** 不变量 | Ex6 | ⬜ 待做 | handler 3 个 TODO + 2 个 `invariant_*` 全绿 | 从「我构造场景」到「机器搜索反例」 |
+| **P6** 不变量 | Ex6 | ✅ 10-20 | handler 3 个 TODO + 2 个 `invariant_*` 全绿 | 从「我构造场景」到「机器搜索反例」 |
 | **P7** 威胁模型 | A–D + E | ⬜ 待做 | A–D 8 题作答（150–300 词）+ E 表 | 25% 权重；把动手经验兑换成判断力 |
 | **P8** 上测试网 | Tier 2 | ⬜ 待做 | Sepolia 七地址 + Etherscan 全部验证 | 真实成本、不可逆性、公开可核对 |
 | **P9** 文档与打包 | 风格/架构图/zip | ⬜ 待做 | README 架构图 + `make fmt` + 无 `.env` 的 zip | 15% 权重；让别人能读懂并复现 |
@@ -448,17 +448,18 @@ assets   USDC     6 decimals     18 + 8 - 6 = 20  ->  divide by 10^20
 
 ### 5.8 P6 · 不变量：让机器搜索反例（Ex6）
 
-**出口** — ⬜ **待通过**
+**出口** — ✅ **已通过 · 2026-10-20**
+证据：`03_InvariantTasks.t.sol` 两条不变量通过，`runs: 256, calls: 128000, reverts: 0`；六个 handler 动作都被调用（各约 21k 次）；`make exercise` 的 01 / 02 / 03 三组全绿；`make test` 7 passed；`forge fmt --check test/exercises/03_InvariantTasks.t.sol` 无输出。
 
-- [ ] Ex6.1 handler 的 `enqueue` 实现完毕
-- [ ] Ex6.2 handler 的 `settle` 实现完毕
-- [ ] Ex6.3 handler 的 `claim` 实现完毕
-- [ ] `invariant_EscrowConservation` 改成真正要捍卫的性质并通过
-- [ ] `invariant_SettlementSolvency` 改成真正要捍卫的性质并通过
-- [ ] `make exercise` 中 `03_InvariantTasks.t.sol` 组全绿
-- [ ] `make exercise` **总体全绿**（`01_*` / `02_*` / `03_*` 三组，共 20 个测试函数）
-- [ ] `make test` 核心 7 个仍全绿
-- [ ] 能回答：为什么 `vault.reserveBalance() >= queue.pendingAssets()` **不是**一条可以写出来的不变量？
+- [x] Ex6.1 handler 的 `enqueue` 实现完毕
+- [x] Ex6.2 handler 的 `settle` 实现完毕
+- [x] Ex6.3 handler 的 `claim` 实现完毕
+- [x] `invariant_EscrowConservation` 改成真正要捍卫的性质并通过
+- [x] `invariant_SettlementSolvency` 改成真正要捍卫的性质并通过
+- [x] `make exercise` 中 `03_InvariantTasks.t.sol` 组全绿
+- [x] `make exercise` **总体全绿**（01 7 + 02 11 + 03 两条不变量）
+- [x] `make test` 核心 7 个仍全绿
+- [ ] 能回答：为什么 `vault.reserveBalance() >= queue.pendingAssets()` **不是**一条可以写出来的不变量？← 这一项由你自己确认
 
 **意义**
 
@@ -491,6 +492,9 @@ vault.reserveBalance() >= queue.pendingAssets()     // ❌ 不是不变量
 > **提示**：Foundry 会缓存反例到 `cache/invariant/`。如果结果诡异或反复失败，先 `rm -rf cache/invariant` 再跑。
 
 **技术细节见 §6.4。**
+
+📄 **完整规范**：`2026-10-20-p6-ex6-invariant-testing-spec.md`
+—— 含 handler 的必要性、三个 handler TODO、两条不变量、`assertGe` 的原因、第三条关系的反例、出口清单、五道自测题与故障排查。
 
 ---
 
@@ -698,7 +702,7 @@ Ex7 的设定是：你是一个 KYC 通过的客户，同时持有 `REPORTER_ROL
 make exercise    # 未完成时是红的——红色就是你的任务清单，不是 bug
 ```
 
-> 再强调一次：`make test` 应始终全绿（7 个核心测试）；`make exercise` 完成后全绿（20 个测试函数）。两个命令的分工不要混淆。
+> 再强调一次：`make test` 应始终全绿（7 个核心测试）；`make exercise` 完成后全绿（01 7 + 02 11 + 03 两条不变量）。两个命令的分工不要混淆。
 
 ### 6.2 Ex2 / Ex3 / Ex4 详细要求（`01_BridgeTasks.t.sol`）
 
@@ -897,7 +901,7 @@ zip -r submission.zip . \
 
 - [x] `make doctor` 全绿
 - [x] `make test` 全绿（`7 passed; 0 failed`）
-- [ ] `make exercise` 全绿（`01_*` / `02_*` / `03_*` 三组，共 20 个测试函数）
+- [x] `make exercise` 全绿（01 7 + 02 11 + 03 两条不变量；Foundry 把 03 报为 1 个 invariant suite）
 - [x] Ex1 的买入侧已走通（faucet → subscribe → 读 NAV / holdings → 观察 redeem revert）
 - [ ] P5 完成后回补 Ex1 卖出侧（enqueue → settle → claim）
 - [ ] `STUDENT-QUESTIONS.md` 的 A1–D2 共 8 题全部作答（每题 150–300 词）
@@ -1016,6 +1020,7 @@ make restore           # 从 demo-state.json 恢复
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| v1.8 | 2026-10-20 | **P6 出口已通过**：实现 handler 三个 TODO 与两条不变量，`03_InvariantTasks.t.sol` `runs 256 / calls 128000 / reverts 0`；`make exercise` 01/02/03 全绿；新增下游规范 `2026-10-20-p6-ex6-invariant-testing-spec.md`；§5.1、§5.8、§10.1、§13 已回写 |
 | v1.7 | 2026-10-20 | **P5 出口已通过**：实现 `RedemptionQueue.sol` 的四个 TODO，`02_QueueTasks.t.sol` `11 passed`；`make test` 7 passed；新增下游规范 `2026-10-20-p5-ex5-redemption-queue-spec.md`；§5.1、§5.7、§13 已回写 |
 | v1.6 | 2026-10-20 | **P4 出口已通过**：实现三个 Ex4 测试，`01_BridgeTasks.t.sol` 整组 `7 passed`；`make test` 7 passed；新增下游规范 `2026-10-20-p4-ex4-admission-spec.md`；§5.1、§5.6、§13 已回写 |
 | v1.5 | 2026-10-20 | **P3 出口已通过**：实现两个 Ex3 测试（Ex2+Ex3 共 `4 passed`）；`make test` 7 passed；新增下游规范 `2026-10-20-p3-ex3-attestation-spec.md`；§5.1、§5.5、§13 已回写 |
@@ -1032,9 +1037,9 @@ make restore           # 从 demo-state.json 恢复
 - `2026-10-20-p3-ex3-attestation-spec.md` —— P3 · Ex3 Attestation
 - `2026-10-20-p4-ex4-admission-spec.md` —— P4 · Ex4 准入
 - `2026-10-20-p5-ex5-redemption-queue-spec.md` —— P5 · Ex5 赎回队列
+- `2026-10-20-p6-ex6-invariant-testing-spec.md` —— P6 · Ex6 不变量测试
 
 **后续规范文件计划**（占位，待撰）
 
-- `2026-10-19-p6-ex6-invariant-testing-spec.md` —— P6 · Ex6 不变量测试
 - `2026-10-19-p7-threat-model-spec.md` —— P7 威胁模型作答规范
 - `2026-10-19-p8-tier2-deployment-spec.md` —— P8 Tier 2 部署与验证
