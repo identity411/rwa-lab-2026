@@ -164,7 +164,20 @@ contract BridgeTasksTest is Test {
     ///      TBillToken.NotWhitelisted(attacker)。模糊的“它 revert 了”在守卫被移除后
     ///      依然是绿的，所以必须断言精确的 selector。
     function test_Ex4_NoKyc_NoShares_EvenIfYouPay() public {
-        assertTrue(false, "TODO Ex4.1");
+        // 先给 attacker 钱并授权，否则 revert 的原因可能是余额/额度，而不是白名单。
+        usdc.faucet(attacker, 1_000e6);
+        vm.startPrank(attacker);
+        usdc.approve(address(vault), 1_000e6);
+
+        // 钉死错误选择器：必须是 NotWhitelisted(attacker)，不是模糊的“它 revert 了”。
+        vm.expectRevert(abi.encodeWithSelector(TBillToken.NotWhitelisted.selector, attacker));
+        vault.subscribe(1_000e6);
+        vm.stopPrank();
+
+        // 整笔订阅回滚：attacker 没拿到份额，钱也还在。
+        assertEq(tBill.balanceOf(attacker), 0, "attacker received no shares");
+        assertEq(usdc.balanceOf(attacker), 1_000e6, "the subscription was rolled back");
+        assertEq(vault.reserveBalance(), 0, "no USDC entered the vault");
     }
 
     /// @dev 白名单持有人也不能把份额“发送”给非白名单地址——
@@ -172,7 +185,16 @@ contract BridgeTasksTest is Test {
     ///      提示：alice 先申购，然后 alice 调用 tBill.transfer(attacker, 1e18)。把 revert
     ///      钉在 NotWhitelisted(attacker) 上——注意错误里出现的是“哪一个”地址。
     function test_Ex4_TransferChecksBothEndpoints() public {
-        assertTrue(false, "TODO Ex4.2");
+        _subscribe(alice, 1_000e6);
+
+        // alice 在白名单上，但接收方 attacker 不在；错误里出现的是 attacker。
+        vm.startPrank(alice);
+        vm.expectRevert(abi.encodeWithSelector(TBillToken.NotWhitelisted.selector, attacker));
+        tBill.transfer(attacker, 1e18);
+        vm.stopPrank();
+
+        assertEq(tBill.balanceOf(alice), 1_000e18, "alice's shares did not move");
+        assertEq(tBill.balanceOf(attacker), 0, "attacker received nothing");
     }
 
     /// @dev 把一个地址移出名单会冻结这个持有人——而且比看起来更强。同一个 _update
@@ -182,6 +204,21 @@ contract BridgeTasksTest is Test {
     ///      以 NotWhitelisted(alice) revert。不要用 pause()——那是全局开关，
     ///      是另一个问题（STUDENT-QUESTIONS.md C2）。
     function test_Ex4_FreezeBeatsConfiscation() public {
-        assertTrue(false, "TODO Ex4.3");
+        _subscribe(alice, 1_000e6);
+
+        // 把 alice 移出名单：她不能再转出。
+        compliance.setWhitelisted(alice, false);
+
+        vm.startPrank(alice);
+        vm.expectRevert(abi.encodeWithSelector(TBillToken.NotWhitelisted.selector, alice));
+        tBill.transfer(bob, 1e18);
+        vm.stopPrank();
+
+        // 同一个 _update 守卫也挡在 burn 前面：admin 也无法没收 alice 的份额。
+        vm.expectRevert(abi.encodeWithSelector(TBillToken.NotWhitelisted.selector, alice));
+        tBill.burn(alice, 1_000e18);
+
+        assertEq(tBill.balanceOf(alice), 1_000e18, "alice's shares are frozen, not seized");
+        assertEq(tBill.balanceOf(bob), 0, "bob received nothing");
     }
 }

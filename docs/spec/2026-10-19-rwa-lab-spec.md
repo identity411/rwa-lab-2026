@@ -6,7 +6,7 @@
 |---|---|
 | 规范英文名 | RWA Tokenization Lab — Assignment Specification |
 | 规范编号 | SPEC-2026-10-19-RWA-LAB |
-| 版本 | v1.5 |
+| 版本 | v1.6 |
 | 发布日期 | 2026-10-19 |
 | 适用课程 | COMP7810A · Assignment Three「RWA Tokenization Lab」 |
 | 仓库 | `rwa-lab-2026` |
@@ -215,7 +215,7 @@ make test      # 应输出 7 passed; 0 failed
 | **P1** 走一遍桥（不计分） | Ex1 | ✅ 10-20（买入侧） | Anvil 上完成买入侧 + 亲眼看见「余额不变、价值浮动」 | 代币是索取权，不是资产 |
 | **P2** 托管 | Ex2 | ✅ 10-20 | 2 个 `test_Ex2_*` 转绿 | 份额存在 ≠ 托管箱里有东西 |
 | **P3** Attestation | Ex3 | ✅ 10-20 | 2 个 `test_Ex3_*` 转绿 | 一个数字重估整本账 |
-| **P4** 准入 | Ex4 | ⬜ 待做 | 3 个 `test_Ex4_*` 转绿 | 白名单检查两端；冻结也冻结没收 |
+| **P4** 准入 | Ex4 | ✅ 10-20 | 3 个 `test_Ex4_*` 转绿 | 白名单检查两端；冻结也冻结没收 |
 | **P5** 赎回队列 | Ex5 | ⬜ 待做 | 4 个 TODO 完成，`02_*` 组全绿 | T+1 不能原子结算；三套小数 |
 | **P6** 不变量 | Ex6 | ⬜ 待做 | handler 3 个 TODO + 2 个 `invariant_*` 全绿 | 从「我构造场景」到「机器搜索反例」 |
 | **P7** 威胁模型 | A–D + E | ⬜ 待做 | A–D 8 题作答（150–300 词）+ E 表 | 25% 权重；把动手经验兑换成判断力 |
@@ -361,13 +361,14 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ──> P5 ──> P6 ──> P7 
 
 ### 5.6 P4 · 准入：守卫在哪里，钥匙有多强（Ex4）
 
-**出口** — ⬜ **待通过**
+**出口** — ✅ **已通过 · 2026-10-20**
+证据：`forge test --match-path 'test/exercises/01_BridgeTasks.t.sol'` → `7 passed; 0 failed`；`make test` → `7 passed; 0 failed`；`forge fmt --check test/exercises/01_BridgeTasks.t.sol` 无输出。
 
-- [ ] `test_Ex4_NoKyc_NoShares_EvenIfYouPay` 转绿
-- [ ] `test_Ex4_TransferChecksBothEndpoints` 转绿
-- [ ] `test_Ex4_FreezeBeatsConfiscation` 转绿
-- [ ] `make test` 核心 7 个仍全绿
-- [ ] 能说清：为什么三个测试都必须用 `abi.encodeWithSelector` **钉死错误选择器**，而不能只写「它 revert 了」
+- [x] `test_Ex4_NoKyc_NoShares_EvenIfYouPay` 转绿
+- [x] `test_Ex4_TransferChecksBothEndpoints` 转绿
+- [x] `test_Ex4_FreezeBeatsConfiscation` 转绿
+- [x] `make test` 核心 7 个仍全绿
+- [ ] 能说清：为什么三个测试都必须用 `abi.encodeWithSelector` **钉死错误选择器**，而不能只写「它 revert 了」← 这一项由你自己确认
 
 **意义**
 
@@ -386,6 +387,9 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ──> P5 ──> P6 ──> P7 
 > 自测：如果监管要求「冻结某个地址，但允许发行人没收其份额」，当前代码能不能做到？要改哪一处？
 
 **技术细节见 §6.2。**
+
+📄 **完整规范**：`2026-10-20-p4-ex4-admission-spec.md`
+—— 含 `_update` 的三个入口、freeze vs pause、三个测试的断言设计、出口清单、四道自测题与故障排查。
 
 ---
 
@@ -1008,6 +1012,7 @@ make restore           # 从 demo-state.json 恢复
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| v1.6 | 2026-10-20 | **P4 出口已通过**：实现三个 Ex4 测试，`01_BridgeTasks.t.sol` 整组 `7 passed`；`make test` 7 passed；新增下游规范 `2026-10-20-p4-ex4-admission-spec.md`；§5.1、§5.6、§13 已回写 |
 | v1.5 | 2026-10-20 | **P3 出口已通过**：实现两个 Ex3 测试（Ex2+Ex3 共 `4 passed`）；`make test` 7 passed；新增下游规范 `2026-10-20-p3-ex3-attestation-spec.md`；§5.1、§5.5、§13 已回写 |
 | v1.4 | 2026-10-20 | **P2 出口已通过**：实现 `01_BridgeTasks.t.sol` 的两个 Ex2 测试（`2 passed`）；`make test` 7 passed；新增下游规范 `2026-10-20-p2-ex2-custody-spec.md`；§5.1、§5.4、§13 已回写 |
 | v1.3 | 2026-10-20 | 新增下游规范 `2026-10-20-p1-bridge-walkthrough.md`（P1 操作规范）；§5.3 加入链接；§13 已发布清单更新 |
@@ -1020,10 +1025,10 @@ make restore           # 从 demo-state.json 恢复
 - `2026-10-20-p1-bridge-walkthrough.md` —— P1 阶段操作规范（买入侧 + P5 回补卖出侧）
 - `2026-10-20-p2-ex2-custody-spec.md` —— P2 · Ex2 托管
 - `2026-10-20-p3-ex3-attestation-spec.md` —— P3 · Ex3 Attestation
+- `2026-10-20-p4-ex4-admission-spec.md` —— P4 · Ex4 准入
 
 **后续规范文件计划**（占位，待撰）
 
-- `2026-10-19-p4-ex4-admission-spec.md` —— P4 · Ex4 准入
 - `2026-10-19-p5-ex5-redemption-queue-spec.md` —— P5 · Ex5 赎回队列
 - `2026-10-19-p6-ex6-invariant-testing-spec.md` —— P6 · Ex6 不变量测试
 - `2026-10-19-p7-threat-model-spec.md` —— P7 威胁模型作答规范
