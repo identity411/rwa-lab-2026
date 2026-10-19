@@ -8,17 +8,16 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {TBillToken} from "../TBillToken.sol";
 import {TBillVault} from "../TBillVault.sol";
 
-/// @title The redemption queue (Ex5) — four TODOs are waiting for you
-/// @notice This is plank (c) of the bridge, the physical side. Selling a T-Bill and wiring the
-///         cash takes a day (T+1 as it settles), so a redemption cannot be atomic. Instead the
-///         holder hands in their shares and gets a ticket; when the issuer's cash lands, the
-///         tickets are honoured strictly first-in-first-out. When cash is short, the queue
-///         backs up — and the people at the back are the ones who wait.
+/// @title 赎回队列（Ex5）——四个 TODO 在等你
+/// @notice 这是桥的木板 (c)，物理的一侧。卖出一张 T-Bill、把现金汇回来需要一天
+///         （T+1 结算），所以赎回不能原子完成。持有人把份额交进来，拿到一张
+///         ticket；等发行人的现金到账，ticket 严格按先进先出兑付。现金不够时，
+///         队列会积压——排在后面的人等待。
 ///
-///         This is also where the decimals bite again. Three scales:
-///           shares    18 decimals  (tBILL)
-///           NAV        8 decimals  (per share)
-///           assets     6 decimals  (USDC)
+///         这里也是小数再次咬人的地方。三套精度：
+///           shares    18 位小数（tBILL）
+///           NAV        8 位小数（每份）
+///           assets     6 位小数（USDC）
 contract RedemptionQueue is AccessControl {
     using SafeERC20 for IERC20;
 
@@ -31,25 +30,25 @@ contract RedemptionQueue is AccessControl {
     uint256 public constant NAV_PRECISION = 1e8;
     uint256 public constant SHARE_PRECISION = 1e18;
     uint256 public constant ASSET_PRECISION = 1e6;
-    /// @dev 18 + 8 - 6 — the same number as in the vault
+    /// @dev 18 + 8 - 6 —— 和 vault 里同一个数
     uint256 public constant DECIMALS_SCALE = 1e20;
 
     struct Request {
         address owner;
-        uint256 shares; // escrowed shares, 18 decimals
-        uint256 assetsLocked; // payout promised at the NAV when enqueued, 6 decimals
+        uint256 shares; // 托管的份额，18 位小数
+        uint256 assetsLocked; // enqueue 时按 NAV 锁定的 payout，6 位小数
         bool settled;
     }
 
     Request[] public requests;
 
-    /// @dev Index of the first request that has not been settled — the head of the queue
+    /// @dev 第一张尚未结算的 request 的下标——队列头
     uint256 public head;
-    /// @dev Shares held by this contract, backing the unsettled requests
+    /// @dev 本合约持有的份额，对应尚未结算的 request
     uint256 public pendingShares;
-    /// @dev Assets still owed to the unsettled requests, 6 decimals
+    /// @dev 尚未结算的 request 还欠的资产，6 位小数
     uint256 public pendingAssets;
-    /// @dev Cash settled and waiting to be claimed
+    /// @dev 已结算、等待领取的现金
     uint256 public totalClaimable;
     mapping(address => uint256) public claimable;
 
@@ -76,7 +75,7 @@ contract RedemptionQueue is AccessControl {
     }
 
     // ==================================================================
-    // Given to you — read-only helpers, do not touch
+    // 已经给你——只读 helper，不要改
     // ==================================================================
 
     function queueLength() external view returns (uint256) {
@@ -88,60 +87,112 @@ contract RedemptionQueue is AccessControl {
     }
 
     // ==================================================================
-    // TODO Ex5.1 — the decimal conversion
+    // TODO Ex5.1 —— 小数换算
     // ==================================================================
 
-    /// @notice Value `shares` (18 decimals) in USDC smallest units (6 decimals), at an
-    ///         8-decimal NAV
-    /// @dev The product carries 18 + 8 = 26 decimals and you want 6 — divide by 10 to the what?
+    /// @notice 把 `shares`（18 位小数）按 8 位小数的 NAV 换算成 USDC 最小单位（6 位小数）
+    /// @dev 乘积有 18 + 8 = 26 位小数，你想要 6 位——除以 10 的几次方？
     function assetsAtNav(uint256 shares, uint256 nav) public pure returns (uint256) {
-        revert("TODO Ex5.1: assetsAtNav");
+        return shares * nav / DECIMALS_SCALE;
     }
 
     // ==================================================================
-    // TODO Ex5.2 — take the ticket
+    // TODO Ex5.2 —— 拿 ticket
     // ==================================================================
 
-    /// @notice Hand in `shares` and lock in a payout at today's NAV
-    /// @dev Steps:
-    ///        1) reject a zero amount
-    ///        2) pull the shares in — the caller must have approved this contract first
-    ///        3) read today's NAV and lock the payout with assetsAtNav
-    ///        4) record the ticket and return its id
-    ///        5) keep pendingShares and pendingAssets in step with what is outstanding
-    ///      Locking the rate now is the point: the payout must not drift with the NAV while
-    ///      the ticket waits in the queue.
+    /// @notice 交进 `shares`，按今天的 NAV 锁定 payout
+    /// @dev 步骤：
+    ///        1) 拒绝 0 数量
+    ///        2) 把份额拉进来——调用者必须先 approve 本合约
+    ///        3) 读今天的 NAV，用 assetsAtNav 锁定 payout
+    ///        4) 记录 ticket 并返回它的 id
+    ///        5) 让 pendingShares 和 pendingAssets 与未结清的数量保持同步
+    ///      现在就锁定汇率是关键：payout 不能在 ticket 排队时随 NAV 漂移。
     function enqueue(uint256 shares) external returns (uint256 id) {
-        revert("TODO Ex5.2: enqueue");
+        if (shares == 0) revert ZeroAmount();
+
+        // 先把份额拉进队列：调用者必须先 approve 本合约。
+        IERC20(address(tBill)).safeTransferFrom(msg.sender, address(this), shares);
+
+        // 按今天的 NAV 锁定 payout；之后 NAV 再变，这张 ticket 也不变。
+        uint256 assetsLocked = assetsAtNav(shares, vault.navPerShare());
+
+        id = requests.length;
+        requests.push(
+            Request({owner: msg.sender, shares: shares, assetsLocked: assetsLocked, settled: false})
+        );
+
+        pendingShares += shares;
+        pendingAssets += assetsLocked;
+
+        emit RedeemRequested(id, msg.sender, shares, assetsLocked);
     }
 
     // ==================================================================
-    // TODO Ex5.3 — honour the queue, first in first out
+    // TODO Ex5.3 —— 按先进先出兑付队列
     // ==================================================================
 
-    /// @notice `assets` of cash has arrived from selling the underlying; pay out tickets
-    ///         strictly from the head, oldest first
-    /// @dev A ticket is honoured in full or not at all. If the remaining cash cannot cover
-    ///      the next ticket, stop and leave it for the next settlement — never pay a later
-    ///      ticket ahead of an earlier one.
-    ///      For each ticket you settle:
-    ///        - pull exactly that ticket's cash out of the vault
-    ///        - mark it settled and advance `head`
-    ///        - burn its escrowed shares
-    ///        - decrement pendingShares and pendingAssets
-    ///        - credit the owner's claimable balance and totalClaimable
-    ///      Return how much you actually paid out.
+    /// @notice 卖出底层资产后，`assets` 现金到账；严格从队头开始，最老的先付
+    /// @dev 一张 ticket 要么全额兑付，要么完全不付。如果剩余现金不够付下一张，
+    ///      就停下，留给下一次结算——绝不允许跳过前面的票去付后面的票。
+    ///      对每一张你结算的 ticket：
+    ///        - 从 vault 拉出正好这张票的现金
+    ///        - 标记为已结算，并推进 `head`
+    ///        - 烧掉它托管的份额
+    ///        - 减少 pendingShares 和 pendingAssets
+    ///        - 给 owner 的 claimable 和 totalClaimable 记账
+    ///      返回你实际付出去多少。
     function settle(uint256 assets) external onlyRole(SETTLER_ROLE) returns (uint256 filled) {
-        revert("TODO Ex5.3: settle");
+        uint256 remaining = assets;
+        uint256 id = head;
+        uint256 length = requests.length;
+
+        while (id < length) {
+            Request storage request = requests[id];
+
+            // 一张 ticket 是 all-or-nothing：剩余现金不够付它，就停在这里。
+            if (request.assetsLocked > remaining) break;
+
+            // 先更新状态（CEI），再做外部调用。
+            request.settled = true;
+            head = id + 1;
+            pendingShares -= request.shares;
+            pendingAssets -= request.assetsLocked;
+
+            uint256 payout = request.assetsLocked;
+            remaining -= payout;
+            filled += payout;
+
+            claimable[request.owner] += payout;
+            totalClaimable += payout;
+
+            // 从 vault 拉现金；vault 只认 queue 这个调用者。
+            vault.releaseReserves(address(this), payout);
+            // 烧掉队列托管的份额；需要 MINTER_ROLE，且队列在白名单上。
+            tBill.burn(address(this), request.shares);
+
+            emit Settled(id, request.owner, payout);
+
+            ++id;
+        }
     }
 
     // ==================================================================
-    // TODO Ex5.4 — collect
+    // TODO Ex5.4 —— 领取
     // ==================================================================
 
-    /// @notice Withdraw the cash credited to you by settled tickets
-    /// @dev Checks-effects-interactions: zero the balance before the transfer.
+    /// @notice 提取已结算 ticket 记给你的现金
+    /// @dev Checks-effects-interactions：先清零余额，再转账。
     function claim() external returns (uint256 assets) {
-        revert("TODO Ex5.4: claim");
+        assets = claimable[msg.sender];
+        if (assets == 0) revert NothingToClaim();
+
+        // CEI：先把状态清零，再转账。
+        claimable[msg.sender] = 0;
+        totalClaimable -= assets;
+
+        usdc.safeTransfer(msg.sender, assets);
+
+        emit Claimed(msg.sender, assets);
     }
 }

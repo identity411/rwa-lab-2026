@@ -6,7 +6,7 @@
 |---|---|
 | 规范英文名 | RWA Tokenization Lab — Assignment Specification |
 | 规范编号 | SPEC-2026-10-19-RWA-LAB |
-| 版本 | v1.6 |
+| 版本 | v1.7 |
 | 发布日期 | 2026-10-19 |
 | 适用课程 | COMP7810A · Assignment Three「RWA Tokenization Lab」 |
 | 仓库 | `rwa-lab-2026` |
@@ -216,7 +216,7 @@ make test      # 应输出 7 passed; 0 failed
 | **P2** 托管 | Ex2 | ✅ 10-20 | 2 个 `test_Ex2_*` 转绿 | 份额存在 ≠ 托管箱里有东西 |
 | **P3** Attestation | Ex3 | ✅ 10-20 | 2 个 `test_Ex3_*` 转绿 | 一个数字重估整本账 |
 | **P4** 准入 | Ex4 | ✅ 10-20 | 3 个 `test_Ex4_*` 转绿 | 白名单检查两端；冻结也冻结没收 |
-| **P5** 赎回队列 | Ex5 | ⬜ 待做 | 4 个 TODO 完成，`02_*` 组全绿 | T+1 不能原子结算；三套小数 |
+| **P5** 赎回队列 | Ex5 | ✅ 10-20 | 4 个 TODO 完成，`02_*` 组全绿 | T+1 不能原子结算；三套小数 |
 | **P6** 不变量 | Ex6 | ⬜ 待做 | handler 3 个 TODO + 2 个 `invariant_*` 全绿 | 从「我构造场景」到「机器搜索反例」 |
 | **P7** 威胁模型 | A–D + E | ⬜ 待做 | A–D 8 题作答（150–300 词）+ E 表 | 25% 权重；把动手经验兑换成判断力 |
 | **P8** 上测试网 | Tier 2 | ⬜ 待做 | Sepolia 七地址 + Etherscan 全部验证 | 真实成本、不可逆性、公开可核对 |
@@ -395,15 +395,16 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ──> P5 ──> P6 ──> P7 
 
 ### 5.7 P5 · 赎回队列：T+1 不能原子结算（Ex5）
 
-**出口** — ⬜ **待通过**
+**出口** — ✅ **已通过 · 2026-10-20**
+证据：`forge test --match-path 'test/exercises/02_QueueTasks.t.sol'` → `11 passed; 0 failed`；`make test` → `7 passed; 0 failed`；`forge fmt --check src/exercises/RedemptionQueue.sol` 无输出。
 
-- [ ] `RedemptionQueue.assetsAtNav` 实现完毕
-- [ ] `enqueue` 实现完毕（托管份额、锁定 NAV、生成 ticket）
-- [ ] `settle` 实现完毕（严格 FIFO、all-or-nothing、放款、烧份额）
-- [ ] `claim` 实现完毕（CEI，先清零再转账）
-- [ ] `make exercise` 中 `02_QueueTasks.t.sol` 组 **11 个测试全绿**
-- [ ] `make test` 核心 7 个仍全绿
-- [ ] 能独立复述 `18 + 8 − 6 = 20`，并解释「除错 10 的幂为什么不会 revert」
+- [x] `RedemptionQueue.assetsAtNav` 实现完毕
+- [x] `enqueue` 实现完毕（托管份额、锁定 NAV、生成 ticket）
+- [x] `settle` 实现完毕（严格 FIFO、all-or-nothing、放款、烧份额）
+- [x] `claim` 实现完毕（CEI，先清零再转账）
+- [x] `make exercise` 中 `02_QueueTasks.t.sol` 组 **11 个测试全绿**
+- [x] `make test` 核心 7 个仍全绿
+- [ ] 能独立复述 `18 + 8 − 6 = 20`，并解释「除错 10 的幂为什么不会 revert」← 这一项由你自己确认
 
 **意义**
 
@@ -439,6 +440,9 @@ assets   USDC     6 decimals     18 + 8 - 6 = 20  ->  divide by 10^20
 > 自测：`settle(1500e6)` 面对两张各 1000e6 的 ticket，应该付几张？`head` 走到哪里？如果「平均分」给两张，会破坏哪条性质？
 
 **技术细节见 §6.3。**
+
+📄 **完整规范**：`2026-10-20-p5-ex5-redemption-queue-spec.md`
+—— 含 enqueue / settle / claim 的心智模型、四个 TODO 的设计说明、三套小数、出口清单、五道自测题与故障排查。
 
 ---
 
@@ -1012,6 +1016,7 @@ make restore           # 从 demo-state.json 恢复
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| v1.7 | 2026-10-20 | **P5 出口已通过**：实现 `RedemptionQueue.sol` 的四个 TODO，`02_QueueTasks.t.sol` `11 passed`；`make test` 7 passed；新增下游规范 `2026-10-20-p5-ex5-redemption-queue-spec.md`；§5.1、§5.7、§13 已回写 |
 | v1.6 | 2026-10-20 | **P4 出口已通过**：实现三个 Ex4 测试，`01_BridgeTasks.t.sol` 整组 `7 passed`；`make test` 7 passed；新增下游规范 `2026-10-20-p4-ex4-admission-spec.md`；§5.1、§5.6、§13 已回写 |
 | v1.5 | 2026-10-20 | **P3 出口已通过**：实现两个 Ex3 测试（Ex2+Ex3 共 `4 passed`）；`make test` 7 passed；新增下游规范 `2026-10-20-p3-ex3-attestation-spec.md`；§5.1、§5.5、§13 已回写 |
 | v1.4 | 2026-10-20 | **P2 出口已通过**：实现 `01_BridgeTasks.t.sol` 的两个 Ex2 测试（`2 passed`）；`make test` 7 passed；新增下游规范 `2026-10-20-p2-ex2-custody-spec.md`；§5.1、§5.4、§13 已回写 |
@@ -1026,10 +1031,10 @@ make restore           # 从 demo-state.json 恢复
 - `2026-10-20-p2-ex2-custody-spec.md` —— P2 · Ex2 托管
 - `2026-10-20-p3-ex3-attestation-spec.md` —— P3 · Ex3 Attestation
 - `2026-10-20-p4-ex4-admission-spec.md` —— P4 · Ex4 准入
+- `2026-10-20-p5-ex5-redemption-queue-spec.md` —— P5 · Ex5 赎回队列
 
 **后续规范文件计划**（占位，待撰）
 
-- `2026-10-19-p5-ex5-redemption-queue-spec.md` —— P5 · Ex5 赎回队列
 - `2026-10-19-p6-ex6-invariant-testing-spec.md` —— P6 · Ex6 不变量测试
 - `2026-10-19-p7-threat-model-spec.md` —— P7 威胁模型作答规范
 - `2026-10-19-p8-tier2-deployment-spec.md` —— P8 Tier 2 部署与验证
