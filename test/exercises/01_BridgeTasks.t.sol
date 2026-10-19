@@ -10,17 +10,16 @@ import {TBillVault} from "../../src/TBillVault.sol";
 import {MockPriceFeed} from "../../src/exercises/MockPriceFeed.sol";
 import {MockTBillCustodian} from "../../src/exercises/MockTBillCustodian.sol";
 
-/// @title Ex2 + Ex3 + Ex4 — three planks of the bridge: custody (a), attestation (b), admission (d)
-/// @notice The bridge is how an off-chain asset becomes an on-chain token. Each exercise below
-///         pulls on one plank and shows you what is holding the span up — and what is not.
-///         The fourth plank, redemption (c), is the queue you write in Ex5.
+/// @title Ex2 + Ex3 + Ex4 —— 桥的三块木板：托管 (a)、attestation (b)、准入 (d)
+/// @notice 桥是链下资产变成链上代币的装置。下面的每个练习各拉一块木板，
+///         让你看到是什么在支撑这座桥——以及什么没有。
+///         第四块木板“赎回 (c)”是你在 Ex5 里要写的队列。
 ///
-///         Every `assertTrue(false, "TODO ...")` below is a placeholder. Write the real
-///         assertion, watch the test go green, and that exercise is done.
+///         下面每一个 `assertTrue(false, "TODO ...")` 都是占位符。写出真正的断言，
+///         看着测试变绿，那个练习就完成了。
 ///
-///         Acceptance: make exercise (it should be red until you are finished)
-///         Do not open test/TBill.t.sol — it contains the answers. Write yours first, and
-///         only look once you are stuck.
+///         验收：make exercise（完成前应该是红的）。
+///         不要打开 test/TBill.t.sol——它里面有答案。先写你自己的，卡住了再看。
 contract BridgeTasksTest is Test {
     MockUSDC internal usdc;
     ComplianceRegistry internal compliance;
@@ -53,7 +52,7 @@ contract BridgeTasksTest is Test {
         compliance.setWhitelisted(bob, true);
     }
 
-    /// @dev Given: pay `assets` of USDC and receive shares at today's NAV
+    /// @dev 给定：支付 `assets` 数量的 USDC，按今天的 NAV 换取份额
     function _subscribe(address user, uint256 assets) internal {
         usdc.faucet(user, assets);
         vm.startPrank(user);
@@ -63,36 +62,36 @@ contract BridgeTasksTest is Test {
     }
 
     // ==================================================================
-    // Ex2 · plank (a) custody — the shares exist, the box may not
+    // Ex2 · 木板 (a) 托管 —— 份额存在，箱子可能不存在
     // ==================================================================
 
-    /// @dev Subscribe 1000 USDC at par, then look at both sides of the bridge at once: the
-    ///      shares alice now holds, and what the custodian actually holds.
-    ///      Hint: _subscribe(alice, 1_000e6), then compare tBill.balanceOf(alice) with
-    ///      custodian.realHoldings(). One of them is 1000e18; the other is zero. Assert both,
-    ///      then ask yourself which contract ever talked to the custodian.
+    /// @dev 按 par 申购 1000 USDC，然后同时看桥的两侧：
+    ///      alice 现在持有的份额，以及托管人实际持有什么。
+    ///      提示：_subscribe(alice, 1_000e6)，然后比较 tBill.balanceOf(alice) 与
+    ///      custodian.realHoldings()。一个是 1000e18，另一个是 0。两个都断言，
+    ///      然后问自己：到底哪一个合约和 custodian 说过话？
     function test_Ex2_SharesExistWhileTheCustodianHoldsNothing() public {
         _subscribe(alice, 1_000e6);
 
-        // subscribe takes alice's USDC and mints shares. It never calls the custodian,
-        // so the claim exists before — and independently of — any T-Bill purchase.
+        // subscribe 只做三件事：收 USDC、按 NAV 算份额、mint 给 alice。
+        // 它从头到尾没有调用 custodian，所以份额在买 T-Bill 之前就已经存在。
         assertEq(tBill.balanceOf(alice), 1_000e18, "alice holds 1000 shares");
         assertEq(tBill.totalSupply(), 1_000e18, "alice's shares are the whole supply");
         assertEq(vault.reserveBalance(), 1_000e6, "the USDC is in the vault");
         assertEq(custodian.realHoldings(), 0, "the custodian reports zero T-Bills");
     }
 
-    /// @dev The custodian's `treasury` is a number a permissioned address can move. Prove that
-    ///      the "backing" is a typed-in integer, not cash that arrived.
-    ///      Hint: recordPurchase is onlyRole(CUSTODIAN_ROLE) and `admin` holds it. Call
-    ///      custodian.recordPurchase(1_000_000e6), then assert realHoldings() jumped while
-    ///      usdc.balanceOf(address(custodian)) is still zero.
+    /// @dev 托管人的 `treasury` 是一个有权限的地址可以移动的数字。证明这个
+    ///      “背书”是一个敲进去的整数，而不是到账的现金。
+    ///      提示：recordPurchase 是 onlyRole(CUSTODIAN_ROLE)，`admin` 持有它。调用
+    ///      custodian.recordPurchase(1_000_000e6)，然后断言 realHoldings() 跳变，
+    ///      而 usdc.balanceOf(address(custodian)) 仍然是 0。
     function test_Ex2_RealHoldingsIsJustANumber() public {
         uint256 reported = 1_000_000e6;
 
-        // recordPurchase is gated by CUSTODIAN_ROLE, which the test contract (admin) holds.
-        // It moves the custodian's reported treasury without moving any USDC: the number
-        // the chain trusts is typed in, not the result of a cash transfer.
+        // recordPurchase 由 CUSTODIAN_ROLE 控制，测试合约（admin）持有这个角色。
+        // 它只改 custodian 账面上的 treasury，不移动任何 USDC：
+        // 链上相信的这个数字是敲进去的，不是现金到账的结果。
         assertEq(custodian.realHoldings(), 0, "the custodian starts at zero");
         custodian.recordPurchase(reported);
         assertEq(custodian.realHoldings(), reported, "the reported holdings jumped");
@@ -100,57 +99,88 @@ contract BridgeTasksTest is Test {
     }
 
     // ==================================================================
-    // Ex3 · plank (b) attestation — the chain's only window is one number
+    // Ex3 · 木板 (b) attestation —— 链上唯一的窗口是一个数字
     // ==================================================================
 
-    /// @dev Subscribe at par, then have the reporter move the NAV up. Assert the two things
-    ///      that make this an RWA and not a stablecoin: the share COUNT is unchanged, and the
-    ///      VALUE of the position moved. A stablecoin would have kept things 1:1.
-    ///      Hint: _subscribe(alice, 1_000e6); read tBill.balanceOf(alice) and
-    ///      vault.totalClaimValue(); then vault.attest(int256(NAV_1_25)); read both again.
-    ///      Shares stay 1000e18; the claim goes 1000e6 -> 1250e6.
+    /// @dev 按 par 申购，然后让报告人把 NAV 调高。断言两件事，它们让这个系统
+    ///      成为 RWA 而不是稳定币：份额“数量”不变，头寸的“价值”变了。
+    ///      稳定币会保持 1:1。
+    ///      提示：_subscribe(alice, 1_000e6)；读 tBill.balanceOf(alice) 和
+    ///      vault.totalClaimValue()；然后 vault.attest(int256(NAV_1_25))；再读一次。
+    ///      份额保持 1000e18；索取权从 1000e6 -> 1250e6。
     function test_Ex3_TheClaimFloats_TheShareCountDoesNot() public {
-        assertTrue(false, "TODO Ex3.1");
+        _subscribe(alice, 1_000e6);
+
+        uint256 sharesBefore = tBill.balanceOf(alice);
+        uint256 claimBefore = vault.totalClaimValue();
+        assertEq(sharesBefore, 1_000e18, "alice holds 1000 shares");
+        assertEq(claimBefore, 1_000e6, "the claim starts at 1000 USDC");
+
+        // 只改 NAV：不移动 USDC，也不 mint/burn 份额。
+        vault.attest(int256(NAV_1_25));
+
+        // 份额是数量，NAV 是单价；单价变了，数量不变，价值变。
+        assertEq(tBill.balanceOf(alice), sharesBefore, "the share count does not move");
+        assertEq(vault.totalClaimValue(), 1_250e6, "the book is re-priced to 1250 USDC");
+        assertEq(vault.assetsForShares(tBill.balanceOf(alice)), 1_250e6, "alice's claim moved");
+        assertEq(vault.reserveBalance(), 1_000e6, "the vault's cash did not move");
+        assertEq(custodian.realHoldings(), 0, "the custodian still reports nothing");
     }
 
-    /// @dev One number re-prices the entire book. Two holders, one call, and both claim values
-    ///      move together. attest is gated by REPORTER_ROLE — `admin` holds it — but nothing
-    ///      downstream can question the number it writes.
-    ///      Hint: _subscribe alice and bob, then vault.attest. A single holder's claim value is
-    ///      vault.assetsForShares(tBill.balanceOf(who)). Pick a moderate NAV (e.g. 50e8) so the
-    ///      totals stay small and readable.
+    /// @dev 一个数字重估整本账。两个持有人、一次调用，两个 claim value 同时变。
+    ///      attest 由 REPORTER_ROLE 控制——`admin` 持有它——但下游没有任何东西
+    ///      能质疑它写下的数字。
+    ///      提示：先 _subscribe alice 和 bob，然后 vault.attest。单个持有人的 claim value
+    ///      是 vault.assetsForShares(tBill.balanceOf(who))。选一个适中的 NAV（例如 50e8），
+    ///      让总数保持小且可读。
     function test_Ex3_OneCallMovesTheWholeBook() public {
-        assertTrue(false, "TODO Ex3.2");
+        _subscribe(alice, 1_000e6);
+        _subscribe(bob, 1_000e6);
+
+        assertEq(vault.totalClaimValue(), 2_000e6, "the book starts at 2000 USDC");
+
+        // 一个报告人写一个数字，整本账按同一个 NAV 重估。
+        vault.attest(int256(50e8));
+
+        // 两个持有人、一次 attest、两本账同时变；份额数量都不变。
+        assertEq(vault.assetsForShares(tBill.balanceOf(alice)), 50_000e6, "alice: 1000 -> 50k");
+        assertEq(vault.assetsForShares(tBill.balanceOf(bob)), 50_000e6, "bob: 1000 -> 50k");
+        assertEq(vault.totalClaimValue(), 100_000e6, "the whole book is 100k");
+        assertEq(tBill.balanceOf(alice), 1_000e18, "alice's share count is unchanged");
+        assertEq(tBill.balanceOf(bob), 1_000e18, "bob's share count is unchanged");
+
+        // 账面价值涨了 98k，但链上的现金和托管报告都没有动。
+        assertEq(vault.reserveBalance(), 2_000e6, "the vault's cash did not move");
+        assertEq(custodian.realHoldings(), 0, "the custodian still reports nothing");
     }
 
     // ==================================================================
-    // Ex4 · plank (d) admission — where the guard is, and who holds the key
+    // Ex4 · 木板 (d) 准入 —— 守卫在哪里，钥匙在谁手里
     // ==================================================================
 
-    /// @dev An address that never passed KYC cannot receive shares, even by paying for them.
-    ///      Hint: faucet the attacker and approve the vault FIRST, or you revert for the wrong
-    ///      reason. Then vm.expectRevert + abi.encodeWithSelector to pin down
-    ///      TBillToken.NotWhitelisted(attacker). A vague "it reverted" stays green even after
-    ///      the guard is removed, so assert the exact selector.
+    /// @dev 一个从未通过 KYC 的地址收不到份额，即使付了钱也不行。
+    ///      提示：先给 attacker faucet 并 approve vault，否则你会因为错误的原因 revert。
+    ///      然后用 vm.expectRevert + abi.encodeWithSelector 钉死
+    ///      TBillToken.NotWhitelisted(attacker)。模糊的“它 revert 了”在守卫被移除后
+    ///      依然是绿的，所以必须断言精确的 selector。
     function test_Ex4_NoKyc_NoShares_EvenIfYouPay() public {
         assertTrue(false, "TODO Ex4.1");
     }
 
-    /// @dev A whitelisted holder still cannot SEND shares to a non-whitelisted address —
-    ///      _update checks both endpoints, not just the sender.
-    ///      Hint: alice subscribes, then alice calls tBill.transfer(attacker, 1e18). Pin the
-    ///      revert on NotWhitelisted(attacker) — note WHICH address appears in the error.
+    /// @dev 白名单持有人也不能把份额“发送”给非白名单地址——
+    ///      _update 检查两端，不只是发送方。
+    ///      提示：alice 先申购，然后 alice 调用 tBill.transfer(attacker, 1e18)。把 revert
+    ///      钉在 NotWhitelisted(attacker) 上——注意错误里出现的是“哪一个”地址。
     function test_Ex4_TransferChecksBothEndpoints() public {
         assertTrue(false, "TODO Ex4.2");
     }
 
-    /// @dev Removing an address from the list freezes that individual holder — and it is
-    ///      stronger than it looks. The same _update guard sits in front of burn(), so once
-    ///      alice is off the list the issuer cannot confiscate her shares either.
-    ///      Hint: alice subscribes; compliance.setWhitelisted(alice, false); assert alice's
-    ///      transfer reverts; then assert tBill.burn(alice, 1_000e18) called by admin ALSO
-    ///      reverts NotWhitelisted(alice). Do not reach for pause() — that is a global switch,
-    ///      a different question (STUDENT-QUESTIONS.md C2).
+    /// @dev 把一个地址移出名单会冻结这个持有人——而且比看起来更强。同一个 _update
+    ///      守卫也挡在 burn() 前面，所以一旦 alice 被移出名单，发行人也无法没收她的份额。
+    ///      提示：alice 先申购；compliance.setWhitelisted(alice, false)；断言 alice 的
+    ///      transfer revert；然后断言 admin 调用的 tBill.burn(alice, 1_000e18) 也
+    ///      以 NotWhitelisted(alice) revert。不要用 pause()——那是全局开关，
+    ///      是另一个问题（STUDENT-QUESTIONS.md C2）。
     function test_Ex4_FreezeBeatsConfiscation() public {
         assertTrue(false, "TODO Ex4.3");
     }
