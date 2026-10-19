@@ -6,7 +6,7 @@
 |---|---|
 | 规范英文名 | RWA Tokenization Lab — Assignment Specification |
 | 规范编号 | SPEC-2026-10-19-RWA-LAB |
-| 版本 | v1.1 |
+| 版本 | v1.3 |
 | 发布日期 | 2026-10-19 |
 | 适用课程 | COMP7810A · Assignment Three「RWA Tokenization Lab」 |
 | 仓库 | `rwa-lab-2026` |
@@ -212,7 +212,7 @@ make test      # 应输出 7 passed; 0 failed
 | 阶段 | 对应 | 状态 | 出口（判定条件） | 意义（一句话） |
 |---|---|---|---|---|
 | **P0** 环境就绪 | Ex0 | ✅ 10-19 | `make doctor` 无 ✗，`make test` = 7 passed | 一切命令的前提 |
-| **P1** 走一遍桥（不计分） | Ex1 | ⬜ 待做 | Anvil 上完成买入侧 + 亲眼看见「余额不变、价值浮动」 | 代币是索取权，不是资产 |
+| **P1** 走一遍桥（不计分） | Ex1 | ✅ 10-20（买入侧） | Anvil 上完成买入侧 + 亲眼看见「余额不变、价值浮动」 | 代币是索取权，不是资产 |
 | **P2** 托管 | Ex2 | ⬜ 待做 | 2 个 `test_Ex2_*` 转绿 | 份额存在 ≠ 托管箱里有东西 |
 | **P3** Attestation | Ex3 | ⬜ 待做 | 2 个 `test_Ex3_*` 转绿 | 一个数字重估整本账 |
 | **P4** 准入 | Ex4 | ⬜ 待做 | 3 个 `test_Ex4_*` 转绿 | 白名单检查两端；冻结也冻结没收 |
@@ -271,12 +271,17 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ──> P5 ──> P6 ──> P7 
 
 ### 5.3 P1 · 走一遍桥（Ex1，不计分）
 
-**出口** — ⬜ **待通过**
+**出口** — ✅ **已通过（买入侧）· 2026-10-20**
+证据（Anvil chain id 31337，`Deploy.s.sol` 部署 7 个合约后）：
 
-- [ ] 在 Anvil 上完成买入侧：`faucet` → `approve` → `subscribe`
-- [ ] 读到三个数字：`tBill.balanceOf(you)`、`vault.navPerShare()`、`vault.totalClaimValue()`
-- [ ] 用 `make attest NAV=...` 改一次 NAV，确认**份额数量不变、索取权价值变化**
-- [ ] 执行一次 `make redeem`，确认它 revert——因为 `RedemptionQueue.enqueue` 还是 TODO（这是设计，不是 bug）
+- `subscribe(1_000e6)` 后：`tBill.balanceOf(admin)` = `1_000e18`，`navPerShare()` = `1.00e8`，`totalClaimValue()` = `1_000e6`，`vault.reserveBalance()` = `1_000e6`，`custodian.realHoldings()` = **0**。
+- `attest(1.25e8)` 后：份额仍为 `1_000e18`（**不变**），`totalClaimValue()` = `1_250e6`（**变了**），`assetsForShares(1_000e18)` = `1_250e6`；vault 的 USDC 储备仍是 `1_000e6`，custodian 仍是 **0**。
+- `make redeem AMOUNT=1000000000000000000`（1 share）：`approve` 成功，`enqueue` 以 `TODO Ex5.2: enqueue` revert；`tBill.balanceOf(queue)` = `0`，`pendingAssets()` = `0`，`queueLength()` = `0`。
+
+- [x] 在 Anvil 上完成买入侧：`faucet` → `approve` → `subscribe`
+- [x] 读到三个数字：`tBill.balanceOf(you)`、`vault.navPerShare()`、`vault.totalClaimValue()`
+- [x] 用 `make attest NAV=...` 改一次 NAV，确认**份额数量不变、索取权价值变化**
+- [x] 执行一次 `make redeem`，确认它 revert——因为 `RedemptionQueue.enqueue` 还是 TODO（这是设计，不是 bug）
 - [ ] （P5 完成后回补）用 `cast` 或测试完成卖出侧：`enqueue` → `settle` → `claim`，拿到 USDC
 
 **意义**
@@ -288,6 +293,9 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ──> P5 ──> P6 ──> P7 
 `make redeem` 在 P5 之前必然 revert，正好让你亲眼看见：赎回不是一次 `transfer`，而是一条**队列**。这条队列就是 P5 要写的合约。
 
 **技术细节见 §6.1（Ex1 行）与 `EXERCISES.md` Ex1。**
+
+📄 **完整操作规范**：`2026-10-20-p1-bridge-walkthrough.md`
+—— 含心智模型（`subscribe` / `attest` / `enqueue` 每一步发生了什么）、可照抄的 runbook、本次实测数字、三个数字的出口实验、五道自测题与故障排查。
 
 ---
 
@@ -874,7 +882,8 @@ zip -r submission.zip . \
 - [x] `make doctor` 全绿
 - [x] `make test` 全绿（`7 passed; 0 failed`）
 - [ ] `make exercise` 全绿（`01_*` / `02_*` / `03_*` 三组，共 20 个测试函数）
-- [ ] Ex1 的买入侧已走通；P5 完成后回补卖出侧（enqueue → settle → claim）
+- [x] Ex1 的买入侧已走通（faucet → subscribe → 读 NAV / holdings → 观察 redeem revert）
+- [ ] P5 完成后回补 Ex1 卖出侧（enqueue → settle → claim）
 - [ ] `STUDENT-QUESTIONS.md` 的 A1–D2 共 8 题全部作答（每题 150–300 词）
 - [ ] E 表 7 行填写完整，并补一个最可能被利用的场景
 - [ ] `README.md` 中有架构图，四块木板与现金/份额流向齐全
@@ -991,16 +1000,17 @@ make restore           # 从 demo-state.json 恢复
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| v1.3 | 2026-10-20 | 新增下游规范 `2026-10-20-p1-bridge-walkthrough.md`（P1 操作规范）；§5.3 加入链接；§13 已发布清单更新 |
+| v1.2 | 2026-10-20 | **P1 出口已通过（买入侧）**：Anvil 上完成 faucet → subscribe → attest；份额 `1_000e18` 不变、claim value `1_000e6 → 1_250e6`；custodian 仍为 0；`make redeem` 按预期以 `TODO Ex5.2` revert；§5.1 状态列、§5.3 出口清单与 §10.1 完成定义已回写 |
 | v1.1 | 2026-10-19 | **P0 出口已通过**：`make doctor` 6 passed / 0 failed，`make test` 7 passed，`forge --version` v1.8.5；§5.1 状态列、§5.2 出口清单与 §10.1 完成定义已回写 |
 | v1.0 | 2026-10-19 | 首版：汇总作业要求与仓库内 `README.md` / `EXERCISES.md` / `STUDENT-QUESTIONS.md` / `Makefile`，按 Ex 分阶段（P0–P6），并加入 P7 威胁模型、P8 Tier 2、P9 文档打包、P10 Tier 3 |
 
 **已发布的下游规范**
 
-（暂无）
+- `2026-10-20-p1-bridge-walkthrough.md` —— P1 阶段操作规范（买入侧 + P5 回补卖出侧）
 
 **后续规范文件计划**（占位，待撰）
 
-- `2026-10-19-p1-bridge-walkthrough.md` —— P1 阶段操作规范（买入侧 + 回补卖出侧）
 - `2026-10-19-p2-ex2-custody-spec.md` —— P2 · Ex2 托管
 - `2026-10-19-p3-ex3-attestation-spec.md` —— P3 · Ex3 Attestation
 - `2026-10-19-p4-ex4-admission-spec.md` —— P4 · Ex4 准入
