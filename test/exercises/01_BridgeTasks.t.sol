@@ -72,7 +72,14 @@ contract BridgeTasksTest is Test {
     ///      custodian.realHoldings(). One of them is 1000e18; the other is zero. Assert both,
     ///      then ask yourself which contract ever talked to the custodian.
     function test_Ex2_SharesExistWhileTheCustodianHoldsNothing() public {
-        assertTrue(false, "TODO Ex2.1");
+        _subscribe(alice, 1_000e6);
+
+        // subscribe takes alice's USDC and mints shares. It never calls the custodian,
+        // so the claim exists before — and independently of — any T-Bill purchase.
+        assertEq(tBill.balanceOf(alice), 1_000e18, "alice holds 1000 shares");
+        assertEq(tBill.totalSupply(), 1_000e18, "alice's shares are the whole supply");
+        assertEq(vault.reserveBalance(), 1_000e6, "the USDC is in the vault");
+        assertEq(custodian.realHoldings(), 0, "the custodian reports zero T-Bills");
     }
 
     /// @dev The custodian's `treasury` is a number a permissioned address can move. Prove that
@@ -81,7 +88,15 @@ contract BridgeTasksTest is Test {
     ///      custodian.recordPurchase(1_000_000e6), then assert realHoldings() jumped while
     ///      usdc.balanceOf(address(custodian)) is still zero.
     function test_Ex2_RealHoldingsIsJustANumber() public {
-        assertTrue(false, "TODO Ex2.2");
+        uint256 reported = 1_000_000e6;
+
+        // recordPurchase is gated by CUSTODIAN_ROLE, which the test contract (admin) holds.
+        // It moves the custodian's reported treasury without moving any USDC: the number
+        // the chain trusts is typed in, not the result of a cash transfer.
+        assertEq(custodian.realHoldings(), 0, "the custodian starts at zero");
+        custodian.recordPurchase(reported);
+        assertEq(custodian.realHoldings(), reported, "the reported holdings jumped");
+        assertEq(usdc.balanceOf(address(custodian)), 0, "but no USDC arrived");
     }
 
     // ==================================================================
